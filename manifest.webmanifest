@@ -1,0 +1,19 @@
+{
+  "name": "BCL Review Rewards",
+  "short_name": "BCL Rewards",
+  "description": "Track Google review incentives for the BCL Globiz team.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#26215C",
+  "theme_color": "#26215C",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

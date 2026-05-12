@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="description" content="BCL Globiz Review Rewards — Google &amp; Trustpilot review tracking with admin approvals (AWS Amplify backed)."/>
+<meta name="theme-color" content="#26215C"/>
+<meta name="robots" content="noindex,nofollow"/>
+<link rel="manifest" href="manifest.webmanifest"/>
+<link rel="icon" type="image/svg+xml" href="icon.svg"/>
+<title>BCL Review Reward Tracker</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--surface:#fff;--surface2:#f1efe8;
+  --border:rgba(0,0,0,0.1);--border2:rgba(0,0,0,0.18);
+  --text:#1a1a1a;--text2:#5f5e5a;--text3:#888780;
+  --purple:#534AB7;--purple-dark:#3C3489;--purple-deepest:#26215C;
+  --purple-light:#EEEDFE;--purple-mid:#AFA9EC;
+  --gold:#EF9F27;--gold-light:#FAEEDA;
+  --green:#3B6D11;--green-light:#EAF3DE;
+  --red:#A32D2D;--red-light:#FCEBEB;
+  --amber:#854F0B;--amber-light:#FAEEDA;
+  --teal:#0F6E56;--teal-light:#E1F5EE;
+  --radius:10px;--radius-sm:6px
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;line-height:1.5}
+.hidden{display:none!important}
+.page{max-width:760px;margin:0 auto;padding:24px 16px 60px}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--purple-deepest)}
+.login-card{background:white;border-radius:16px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 8px 40px rgba(0,0,0,0.25)}
+.login-logo{width:52px;height:52px;border-radius:14px;background:var(--purple-deepest);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:#FAC775;}
+.login-title{text-align:center;font-size:20px;font-weight:600;color:var(--purple-deepest);margin-bottom:4px}
+.login-sub{text-align:center;font-size:13px;color:var(--text2);margin-bottom:24px}
+label{font-size:13px;color:var(--text2);display:block;margin-bottom:5px}
+input[type=text],input[type=password],input[type=email],input[type=number],textarea,select{width:100%;padding:10px 13px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:white;color:var(--text);font-size:14px;font-family:inherit}
+input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 0 0 3px rgba(83,74,183,.12)}
+.field{margin-bottom:14px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:white;color:var(--text);cursor:pointer;font-size:14px;font-family:inherit;font-weight:500;transition:opacity .15s}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn:hover:not(:disabled){background:var(--surface2)}
+.btn-primary{background:var(--purple);color:white;border-color:var(--purple)}.btn-primary:hover:not(:disabled){background:var(--purple-dark)}
+.btn-success{background:var(--green);color:white;border-color:var(--green)}
+.btn-danger{color:var(--red);border-color:#f09595;background:var(--red-light)}
+.btn-full{width:100%;justify-content:center}.btn-sm{padding:6px 13px;font-size:13px}
+.top-bar{background:var(--purple-deepest);color:white;padding:14px 20px;border-radius:var(--radius);margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.top-bar-title{font-size:13px;opacity:.75;margin-bottom:2px}
+.top-bar-count{font-size:28px;font-weight:700;color:#FAC775;line-height:1}
+.top-bar-sub{font-size:12px;opacity:.6;margin-top:2px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:14px}
+.section-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:20px;overflow-x:auto}
+.tab{padding:9px 14px;font-size:13px;cursor:pointer;border:none;background:transparent;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;font-weight:500;white-space:nowrap}
+.tab.active{color:var(--purple);border-bottom-color:var(--purple)}
+.alert{padding:11px 15px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:12px;line-height:1.5}
+.alert-info{background:#E6F1FB;color:#185FA5;border:1px solid #B5D4F4}
+.alert-success{background:var(--green-light);color:var(--green);border:1px solid #C0DD97}
+.alert-warning{background:var(--amber-light);color:var(--amber);border:1px solid #FAC775}
+.alert-danger{background:var(--red-light);color:var(--red);border:1px solid #F7C1C1}
+.upload-zone{border:2px dashed var(--border2);border-radius:var(--radius);padding:2.5rem 1rem;text-align:center;cursor:pointer}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--purple);background:var(--purple-light)}
+.preview-img{max-width:100%;max-height:240px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block;margin:12px auto 0}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-pending{background:var(--amber-light);color:var(--amber)}
+.badge-approved{background:var(--green-light);color:var(--green)}
+.badge-rejected{background:var(--red-light);color:var(--red)}
+.history-row{display:flex;align-items:flex-start;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);gap:12px}
+.history-row:last-child{border-bottom:none}
+.history-thumb{width:64px;height:64px;border-radius:6px;background:var(--surface2);background-size:cover;background-position:center;flex-shrink:0;cursor:pointer;border:1px solid var(--border)}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:16px}
+.stat-box{background:var(--surface2);border-radius:var(--radius-sm);padding:12px;text-align:center}
+.stat-lbl{font-size:11px;color:var(--text3);margin-bottom:4px}
+.stat-val{font-size:22px;font-weight:700;color:var(--text)}
+.stat-val.purple{color:var(--purple)}.stat-val.green{color:var(--green)}.stat-val.amber{color:var(--amber)}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(83,74,183,.25);border-top-color:var(--purple);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.full-spinner{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.85);z-index:9000;flex-direction:column;gap:10px;font-size:13px;color:var(--text2)}
+.full-spinner .spinner{width:36px;height:36px;border-width:3px;margin:0}
+.modal-bg{position:fixed;inset:0;z-index:10001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);padding:20px}
+.modal-card{background:white;border-radius:14px;padding:24px;max-width:480px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.2)}
+@media(max-width:480px){.page{padding:16px 12px 50px}.login-card{padding:28px 20px}.top-bar-count{font-size:22px}}
+</style>
+</head>
+<body>
+
+<!-- FULL-PAGE SPINNER (shown during initial boot + during long operations) -->
+<div id="boot-spinner" class="full-spinner">
+  <div class="spinner"></div>
+  <div id="boot-msg">Loading…</div>
+</div>
+
+<!-- LOGIN / SIGN IN -->
+<div id="login-wrap" class="login-wrap hidden">
+  <div class="login-card">
+    <div class="login-logo">★</div>
+    <div class="login-title">BCL Review Rewards</div>
+    <div class="login-sub">Sign in to track your Google review incentives</div>
+    <div class="field"><label>Email</label><input type="email" id="login-email" placeholder="you@bcl.ae" autocomplete="username"/></div>
+    <div class="field"><label>Password</label><input type="password" id="login-pwd" placeholder="••••••" autocomplete="current-password"/></div>
+    <div id="login-error" class="alert alert-danger hidden" style="margin-bottom:12px"></div>
+    <button class="btn btn-primary btn-full" id="login-btn">Sign in →</button>
+    <div style="text-align:center;margin-top:14px;"><a href="#" id="forgot-link" style="font-size:12px;color:var(--purple);">Forgot password?</a></div>
+    <div style="text-align:center;font-size:11px;color:#aaa;margin-top:18px;">BCL Globiz · Review Reward Program</div>
+  </div>
+</div>
+
+<!-- NEW PASSWORD CHALLENGE (Cognito requires this after the temp password) -->
+<div id="newpw-wrap" class="login-wrap hidden">
+  <div class="login-card">
+    <div class="login-logo">🔑</div>
+    <div class="login-title">Choose a new password</div>
+    <div class="login-sub">Your account was just created. Pick a real password to finish setup.</div>
+    <div class="field"><label>New password</label><input type="password" id="newpw-pwd" placeholder="Min 8 characters, mixed" autocomplete="new-password"/></div>
+    <div class="field"><label>Confirm</label><input type="password" id="newpw-pwd2" placeholder="Repeat" autocomplete="new-password"/></div>
+    <div id="newpw-error" class="alert alert-danger hidden" style="margin-bottom:12px"></div>
+    <button class="btn btn-primary btn-full" id="newpw-btn">Save & continue →</button>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD: request a reset code -->
+<div id="forgot-wrap" class="login-wrap hidden">
+  <div class="login-card">
+    <div class="login-logo">📧</div>
+    <div class="login-title">Reset password</div>
+    <div class="login-sub" id="forgot-sub">Enter your email and we'll send you a code.</div>
+    <div class="field"><label>Email</label><input type="email" id="forgot-email" placeholder="you@bcl.ae"/></div>
+    <div id="forgot-step1" >
+      <div id="forgot-error" class="alert alert-danger hidden" style="margin-bottom:12px"></div>
+      <button class="btn btn-primary btn-full" id="forgot-btn">Send reset code →</button>
+    </div>
+    <div id="forgot-step2" class="hidden">
+      <div class="field"><label>Code from email</label><input type="text" id="forgot-code" placeholder="6-digit code"/></div>
+      <div class="field"><label>New password</label><input type="password" id="forgot-newpw" placeholder="Min 8 characters"/></div>
+      <div id="forgot-error2" class="alert alert-danger hidden" style="margin-bottom:12px"></div>
+      <button class="btn btn-primary btn-full" id="forgot-confirm-btn">Save new password →</button>
+    </div>
+    <div style="text-align:center;margin-top:14px;"><a href="#" id="forgot-back" style="font-size:12px;color:var(--purple);">← Back to sign in</a></div>
+  </div>
+</div>
+
+<!-- STAFF DASHBOARD -->
+<div id="staff-wrap" class="hidden">
+  <div class="page">
+    <div class="top-bar">
+      <div>
+        <div class="top-bar-title" id="staff-greeting">My reviews this month</div>
+        <div style="display:flex;align-items:baseline;gap:8px;"><span class="top-bar-count" id="staff-count">0</span><span style="font-size:13px;opacity:.6;">/ 10 max</span></div>
+        <div class="top-bar-sub">Pending counts toward limit</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:13px;color:#9FE1CB;font-weight:500;">Earned: <span id="staff-earned">₹0</span></div>
+        <div style="font-size:12px;opacity:.6;margin-top:2px;">Next: <span id="staff-next">₹1,000</span></div>
+      </div>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:white;border-color:rgba(255,255,255,.2);" id="staff-signout">Sign out</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="submit">Submit Review</button>
+      <button class="tab" data-tab="history">My History</button>
+    </div>
+
+    <div id="staff-tab-submit">
+      <div class="card">
+        <div class="section-label">Submit a new review screenshot</div>
+        <div id="staff-upload-zone" class="upload-zone">
+          <div style="font-size:36px;margin-bottom:10px;" id="staff-upload-icon">📸</div>
+          <div style="font-size:15px;font-weight:500;" id="staff-upload-title">Click here or drag a screenshot</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px;">Google or Trustpilot screenshot</div>
+        </div>
+        <input type="file" id="staff-file" accept="image/*" style="display:none"/>
+        <img id="staff-preview" class="preview-img hidden" alt="Preview"/>
+        <div id="staff-submit-area" class="hidden" style="margin-top:14px;text-align:right;">
+          <button class="btn btn-success" id="staff-submit-btn">Submit for approval →</button>
+        </div>
+        <div id="staff-msg" style="margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <div id="staff-tab-history" class="hidden">
+      <div class="card">
+        <div class="section-label">Submitted reviews — this month</div>
+        <div id="staff-history-list"><div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN DASHBOARD -->
+<div id="admin-wrap" class="hidden">
+  <div class="page">
+    <div class="top-bar">
+      <div>
+        <div class="top-bar-title">Admin Dashboard — BCL Globiz</div>
+        <div style="display:flex;align-items:baseline;gap:8px;"><span class="top-bar-count" id="admin-pending-count">0</span><span style="font-size:13px;opacity:.6;">pending review<span id="admin-pending-plural">s</span></span></div>
+      </div>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:white;border-color:rgba(255,255,255,.2);" id="admin-signout">Sign out</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-atab="pending">Pending</button>
+      <button class="tab" data-atab="approved">Approved</button>
+      <button class="tab" data-atab="rejected">Rejected</button>
+      <button class="tab" data-atab="users">Users</button>
+    </div>
+
+    <div id="admin-tab-pending">
+      <div class="card"><div id="admin-pending-list"><div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div></div></div>
+    </div>
+    <div id="admin-tab-approved" class="hidden">
+      <div class="card"><div id="admin-approved-list"><div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div></div></div>
+    </div>
+    <div id="admin-tab-rejected" class="hidden">
+      <div class="card"><div id="admin-rejected-list"><div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div></div></div>
+    </div>
+    <div id="admin-tab-users" class="hidden">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div class="section-label" style="margin-bottom:0;">Invite a new user</div>
+        </div>
+        <div class="alert alert-info" style="margin-bottom:14px;">The user gets an email from AWS Cognito with a temporary password. They sign in once, choose a real password, and they're in.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="field"><label>Full name</label><input type="text" id="inv-name" placeholder="Priya Sharma"/></div>
+          <div class="field"><label>Email</label><input type="email" id="inv-email" placeholder="priya@bcl.ae"/></div>
+        </div>
+        <div class="field"><label>Role</label><select id="inv-role"><option value="staff">Staff</option><option value="admin">Admin</option></select></div>
+        <div id="inv-error" class="alert alert-danger hidden" style="margin-bottom:10px"></div>
+        <button class="btn btn-primary" id="inv-btn">Send invite</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- IMAGE LIGHTBOX -->
+<div id="lightbox" class="hidden modal-bg" style="background:rgba(0,0,0,.85);cursor:zoom-out;">
+  <img id="lightbox-img" style="max-width:95%;max-height:95vh;border-radius:8px;"/>
+</div>
+
+<!-- REJECT REASON MODAL -->
+<div id="reject-modal" class="modal-bg hidden">
+  <div class="modal-card">
+    <div style="font-size:16px;font-weight:600;margin-bottom:6px">Reject review</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:14px">Tell <strong id="reject-name">the user</strong> why. They'll see this in their history.</div>
+    <textarea id="reject-text" style="min-height:90px;margin-bottom:14px" placeholder="e.g. Screenshot unclear; resubmit a clearer copy."></textarea>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-sm" id="reject-cancel">Cancel</button>
+      <button class="btn btn-danger btn-sm" id="reject-confirm">Confirm rejection</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-host" style="position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;"></div>
+
+<!-- Amplify SDK is bundled because Hosting needs no build step but we still
+     need ES module access. We use esm.sh which bundles for browsers. -->
+<script type="importmap">
+{
+  "imports": {
+    "aws-amplify": "https://esm.sh/aws-amplify@6.6.0?bundle",
+    "aws-amplify/auth": "https://esm.sh/aws-amplify@6.6.0/auth?bundle",
+    "aws-amplify/data": "https://esm.sh/aws-amplify@6.6.0/data?bundle",
+    "aws-amplify/storage": "https://esm.sh/aws-amplify@6.6.0/storage?bundle"
+  }
+}
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

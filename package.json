@@ -1,0 +1,20 @@
+{
+  "name": "bcl-review-rewards-aws",
+  "version": "1.0.0",
+  "description": "BCL Globiz Review Rewards tracker on AWS Amplify (Cognito + DynamoDB + S3).",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo Static HTML — no frontend build."
+  },
+  "devDependencies": {
+    "@aws-amplify/backend": "^1.4.0",
+    "@aws-amplify/backend-cli": "^1.3.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.658.0",
+    "aws-cdk-lib": "^2.158.0",
+    "constructs": "^10.3.0",
+    "esbuild": "^0.23.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.5.0"
+  }
+}
