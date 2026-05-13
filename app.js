@@ -48,6 +48,48 @@ function currentMonthKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+// ----------------------------- MONTH NAVIGATION ----------------------------
+const PROGRAM_START = { year: 2025, month: 4 };
+function buildMonthList() {
+  const now = new Date(), months = [];
+  let y = PROGRAM_START.year, m = PROGRAM_START.month;
+  const endY = now.getFullYear(), endM = now.getMonth() + 1;
+  while (y * 12 + m <= endY * 12 + endM) {
+    const d = new Date(y, m - 1, 1);
+    months.push({
+      key: `${y}-${String(m).padStart(2, '0')}`,
+      label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+    });
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  return months;
+}
+const MONTH_LIST = buildMonthList();
+const TODAY_KEY = currentMonthKey();
+let selectedMonth = TODAY_KEY;
+
+function monthPickerHTML(id) {
+  const opts = MONTH_LIST.slice().reverse().map(m =>
+    `<option value="${m.key}" ${m.key === selectedMonth ? 'selected' : ''} style="background:#26215C;color:white;">${m.label}${m.key === TODAY_KEY ? ' ✦' : ''}</option>`
+  ).join('');
+  return `<select id="${id}" class="month-picker">${opts}</select>`;
+}
+
+function setMonth(key) {
+  selectedMonth = key;
+  const lockEl = document.getElementById('submit-lock-notice');
+  if (lockEl) {
+    const isCurrent = (key === TODAY_KEY);
+    lockEl.classList.toggle('hidden', isCurrent);
+    const lblEl = document.getElementById('lock-month-label');
+    if (lblEl) {
+      const monthLabel = MONTH_LIST.find(m => m.key === key)?.label || key;
+      lblEl.textContent = monthLabel;
+    }
+  }
+  if (currentRole === 'staff') refreshStaff();
+}
+
 // ----------------------------- BOOT ----------------------------------------
 const bootSpinner = document.getElementById('boot-spinner');
 const bootMsg = document.getElementById('boot-msg');
@@ -247,6 +289,16 @@ function showStaff() {
   hideAllScreens();
   document.getElementById('staff-wrap').classList.remove('hidden');
   document.getElementById('staff-greeting').textContent = `Hi ${currentName?.split(' ')[0] || 'there'} 👋`;
+  selectedMonth = TODAY_KEY;
+  const mpHost = document.getElementById('staff-month-picker-host');
+  if (mpHost) {
+    mpHost.innerHTML = monthPickerHTML('staff-month-sel');
+    const sel = document.getElementById('staff-month-sel');
+    if (sel) sel.addEventListener('change', e => setMonth(e.target.value));
+  }
+  const lockEl = document.getElementById('submit-lock-notice');
+  if (lockEl) lockEl.classList.add('hidden');
+  loadAnnouncement();
   switchStaffTab('submit');
   refreshStaff();
 }
@@ -283,6 +335,7 @@ uploadZone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', e => { if (e.target.files[0]) handleStaffFile(e.target.files[0]); });
 function handleStaffFile(file) {
+  if (selectedMonth !== TODAY_KEY) { toast('You can only submit reviews for the current month.', 'warning'); return; }
   if (file.size > 5 * 1024 * 1024) { toast('Image too large (max 5 MB).', 'warning'); return; }
   pendingFile = file;
   const url = URL.createObjectURL(file);
@@ -291,7 +344,7 @@ function handleStaffFile(file) {
   document.getElementById('staff-upload-title').textContent = file.name;
   document.getElementById('staff-upload-icon').textContent = '✓';
   // Show verify result preview
-  const month = currentMonthKey();
+  const month = TODAY_KEY;
   const thisMonth = staffReviews.filter(r => r.monthKey === month);
   const total = thisMonth.length;
   const verifyEl = document.getElementById('staff-verify-area');
@@ -311,7 +364,8 @@ function handleStaffFile(file) {
 
 document.getElementById('staff-submit-btn').addEventListener('click', async () => {
   if (!pendingFile) return;
-  const monthKey = currentMonthKey();
+  if (selectedMonth !== TODAY_KEY) { toast('You can only submit reviews for the current month.', 'warning'); return; }
+  const monthKey = TODAY_KEY;
   const approvedCount = staffReviews.filter(r => r.status === 'approved').length;
   const totalThisMonth = staffReviews.filter(r => r.monthKey === monthKey).length;
   if (totalThisMonth >= 10) { toast('You\'ve reached the 10/month cap.', 'warning'); return; }
@@ -371,7 +425,7 @@ async function refreshStaff() {
     });
     if (res.errors?.length) throw new Error(res.errors[0].message);
     staffReviews = res.data || [];
-    const month = currentMonthKey();
+    const month = selectedMonth;
     const thisMonth = staffReviews.filter(r => r.monthKey === month);
     const approved = thisMonth.filter(r => r.status === 'approved').length;
     const pending = thisMonth.filter(r => r.status === 'pending').length;
@@ -456,7 +510,8 @@ async function renderStaffHistory(reviews) {
         thumbUrl = u.url.toString();
       }
     } catch {}
-    const dateStr = r.submittedAt ? new Date(r.submittedAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short' }) : '';
+   const dateStr = r.submittedAt ? new Date(r.submittedAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short' }) : '';
+    const canWithdraw = r.status === 'pending' && r.monthKey === TODAY_KEY;
     return `<div class="history-row">
       <div class="history-thumb" data-url="${thumbUrl}" style="background-image:url('${thumbUrl}');"></div>
       <div style="flex:1;min-width:0;">
@@ -466,10 +521,14 @@ async function renderStaffHistory(reviews) {
           ? `<div style="font-size:12px;color:var(--red);margin-top:4px;padding:5px 9px;background:var(--red-light);border-radius:4px;">Admin: ${escapeHtml(r.adminComment)}</div>`
           : ''}
       </div>
-      <div style="text-align:right;"><span class="badge badge-${r.status}">${r.status}</span></div>
+      <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
+        <span class="badge badge-${r.status}">${r.status}</span>
+        ${canWithdraw ? `<button class="btn btn-danger btn-sm" data-withdraw="${r.id}" style="font-size:11px;padding:4px 10px;">Withdraw</button>` : ''}
+      </div>
     </div>`;
   }));
   host.innerHTML = rows.join('');
+  host.querySelectorAll('[data-withdraw]').forEach(b => b.addEventListener('click', () => withdrawReview(b.dataset.withdraw)));
   host.querySelectorAll('.history-thumb').forEach(t => t.addEventListener('click', () => openLightbox(t.dataset.url)));
 }
 
@@ -478,6 +537,7 @@ function showAdmin() {
   hideAllScreens();
   document.getElementById('admin-wrap').classList.remove('hidden');
   switchAdminTab('pending');
+  loadAdminAnnouncement();
 }
 document.querySelectorAll('#admin-wrap .tab').forEach(t => {
   t.addEventListener('click', () => switchAdminTab(t.dataset.atab));
@@ -666,3 +726,107 @@ function openLightbox(url) {
   document.getElementById('lightbox-img').src = url;
   document.getElementById('lightbox').classList.remove('hidden');
 }
+
+// ----------------------------- WITHDRAW REVIEW -----------------------------
+async function withdrawReview(id) {
+  if (!confirm('Withdraw this pending review? This cannot be undone.')) return;
+  try {
+    const review = staffReviews.find(r => r.id === id);
+    if (review?.screenshotPath) {
+      try { await removeFromStorage({ path: review.screenshotPath }); } catch (_) { /* ignore */ }
+    }
+    const res = await client.models.Review.delete({ id });
+    if (res.errors?.length) throw new Error(res.errors[0].message);
+    toast('Review withdrawn.', 'success');
+    refreshStaff();
+  } catch (e) {
+    toast('Could not withdraw: ' + (e.message || e), 'danger');
+  }
+}
+
+// ----------------------------- ANNOUNCEMENT --------------------------------
+async function loadAnnouncement() {
+  const banner = document.getElementById('staff-announcement');
+  const textEl = document.getElementById('staff-announcement-text');
+  if (!banner || !textEl) return;
+  try {
+    const res = await client.models.Announcement.list({
+      filter: { active: { eq: true } },
+      limit: 1
+    });
+    if (res.errors?.length) { banner.classList.add('hidden'); return; }
+    const list = res.data || [];
+    if (list.length > 0 && list[0].text) {
+      textEl.textContent = list[0].text;
+      banner.classList.remove('hidden');
+    } else {
+      banner.classList.add('hidden');
+    }
+  } catch (_) {
+    banner.classList.add('hidden');
+  }
+}
+
+async function loadAdminAnnouncement() {
+  const input = document.getElementById('announcement-input');
+  if (!input) return;
+  try {
+    const res = await client.models.Announcement.list({
+      filter: { active: { eq: true } },
+      limit: 1
+    });
+    if (res.errors?.length) return;
+    const list = res.data || [];
+    input.value = list[0]?.text || '';
+  } catch (_) { /* ignore */ }
+}
+
+async function saveAnnouncementClick() {
+  const input = document.getElementById('announcement-input');
+  const savedMsg = document.getElementById('ann-saved-msg');
+  const text = (input?.value || '').trim();
+  if (!text) { toast('Enter a message first, or click Clear to remove.', 'warning'); return; }
+  const btn = document.getElementById('ann-save-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving…';
+  try {
+    const existing = await client.models.Announcement.list({ filter: { active: { eq: true } } });
+    for (const a of (existing.data || [])) {
+      await client.models.Announcement.update({ id: a.id, active: false });
+    }
+    const res = await client.models.Announcement.create({ text, active: true });
+    if (res.errors?.length) throw new Error(res.errors[0].message);
+    if (savedMsg) {
+      savedMsg.textContent = 'Announcement posted to all staff ✓';
+      savedMsg.classList.remove('hidden');
+      setTimeout(() => savedMsg.classList.add('hidden'), 3000);
+    }
+    toast('Announcement posted.', 'success');
+  } catch (e) {
+    toast('Could not save: ' + (e.message || e), 'danger');
+  } finally {
+    btn.disabled = false; btn.innerHTML = 'Post announcement';
+  }
+}
+
+async function clearAnnouncementClick() {
+  const btn = document.getElementById('ann-clear-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Clearing…';
+  try {
+    const existing = await client.models.Announcement.list({ filter: { active: { eq: true } } });
+    for (const a of (existing.data || [])) {
+      await client.models.Announcement.update({ id: a.id, active: false });
+    }
+    const input = document.getElementById('announcement-input');
+    if (input) input.value = '';
+    toast('Announcement cleared.', 'success');
+  } catch (e) {
+    toast('Could not clear: ' + (e.message || e), 'danger');
+  } finally {
+    btn.disabled = false; btn.innerHTML = 'Clear';
+  }
+}
+
+const annSaveBtn = document.getElementById('ann-save-btn');
+const annClearBtn = document.getElementById('ann-clear-btn');
+if (annSaveBtn) annSaveBtn.addEventListener('click', saveAnnouncementClick);
+if (annClearBtn) annClearBtn.addEventListener('click', clearAnnouncementClick);
