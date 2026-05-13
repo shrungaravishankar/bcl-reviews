@@ -19,11 +19,19 @@ import { uploadData, getUrl, remove as removeFromStorage } from 'aws-amplify/sto
 
 // ----------------------------- TIERS / EARNINGS ---------------------------
 const TIERS = [
-  { n: 1, amt: 1000 },
-  { n: 2, amt: 1250 },
-  { n: 3, amt: 1500 },
-  { n: 4, amt: 1750 },
-  { n: 5, amt: 2000 },
+  { n: 1, amt: 1000, label: '1st review', sub: 'First one this month' },
+  { n: 2, amt: 1250, label: '2nd review', sub: 'Building momentum' },
+  { n: 3, amt: 1500, label: '3rd review', sub: 'Halfway there' },
+  { n: 4, amt: 1750, label: '4th review', sub: 'Almost there' },
+  { n: 5, amt: 2000, label: '5th review', sub: 'Full tier complete!' },
+];
+const TERMS = [
+  'Rewards reset at the start of each calendar month — the 1st review always starts at ₹1,000 regardless of previous months.',
+  'Reviews must be from your own clients only — reviews from another team member\'s client will not be counted.',
+  'Maximum of 10 qualifying reviews per person per month. Reviews beyond the cap will not attract additional reward.',
+  'Reviews must be posted on Google or Trustpilot to qualify.',
+  'Rewards are paid out at the end of each month upon verification.',
+  'Management reserves the right to amend or withdraw the program at any time with reasonable notice.'
 ];
 function calcEarnings(count) {
   let t = 0;
@@ -250,7 +258,8 @@ function switchStaffTab(name) {
   document.querySelectorAll('#staff-wrap .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.getElementById('staff-tab-submit').classList.toggle('hidden', name !== 'submit');
   document.getElementById('staff-tab-history').classList.toggle('hidden', name !== 'history');
-  if (name === 'history') refreshStaff();
+  document.getElementById('staff-tab-tiers').classList.toggle('hidden', name !== 'tiers');
+  if (name === 'history' || name === 'submit' || name === 'tiers') refreshStaff();
 }
 
 document.getElementById('staff-signout').addEventListener('click', doSignOut);
@@ -281,7 +290,23 @@ function handleStaffFile(file) {
   img.src = url; img.classList.remove('hidden');
   document.getElementById('staff-upload-title').textContent = file.name;
   document.getElementById('staff-upload-icon').textContent = '✓';
-  document.getElementById('staff-submit-area').classList.remove('hidden');
+  // Show verify result preview
+  const month = currentMonthKey();
+  const thisMonth = staffReviews.filter(r => r.monthKey === month);
+  const total = thisMonth.length;
+  const verifyEl = document.getElementById('staff-verify-area');
+  const resultEl = document.getElementById('staff-verify-result');
+  if (total >= 10) {
+    if (resultEl) resultEl.innerHTML = '<div class="alert alert-warning">You have reached your review cap (10) for this month.</div>';
+    if (verifyEl) verifyEl.classList.remove('hidden');
+    document.getElementById('staff-submit-area').classList.add('hidden');
+  } else {
+    const nextNum = total + 1;
+    const reward = nextNum <= 5 ? TIERS[nextNum - 1].amt : 2000;
+    if (resultEl) resultEl.innerHTML = `<div class="alert alert-success">✓ Screenshot ready! This will be Review #${nextNum} and earns <strong>${fmtINR(reward)}</strong> once approved by admin.</div>`;
+    if (verifyEl) verifyEl.classList.remove('hidden');
+    document.getElementById('staff-submit-area').classList.remove('hidden');
+  }
 }
 
 document.getElementById('staff-submit-btn').addEventListener('click', async () => {
@@ -330,6 +355,7 @@ document.getElementById('staff-submit-btn').addEventListener('click', async () =
     document.getElementById('staff-upload-title').textContent = 'Click here or drag a screenshot';
     document.getElementById('staff-upload-icon').textContent = '📸';
     document.getElementById('staff-submit-area').classList.add('hidden');
+    document.getElementById('staff-verify-area').classList.add('hidden');
     refreshStaff();
   } catch (e) {
     msgEl.innerHTML = `<div class="alert alert-danger">Upload failed: ${e.message || e}</div>`;
@@ -354,6 +380,20 @@ async function refreshStaff() {
     document.getElementById('staff-earned').textContent = fmtINR(calcEarnings(approved));
     const nxt = nextAmt(approved);
     document.getElementById('staff-next').textContent = nxt ? fmtINR(nxt) : 'Max!';
+    // Progress card + stats grid
+    const pct = Math.min(100, Math.round((Math.min(approved, 5) / 5) * 100));
+    const progFill = document.getElementById('prog-fill');
+    const progPct = document.getElementById('prog-pct');
+    const progLabel = document.getElementById('prog-label');
+    const psCount = document.getElementById('ps-count');
+    const psEarned = document.getElementById('ps-earned');
+    if (progFill) progFill.style.width = pct + '%';
+    if (progPct) progPct.textContent = pct + '%';
+    if (progLabel) progLabel.textContent = Math.min(approved, 5) + ' of 5 tiers complete';
+    if (psCount) psCount.textContent = total;
+    if (psEarned) psEarned.textContent = fmtINR(calcEarnings(approved));
+    renderTiers(approved);
+    renderTerms();
     renderStaffHistory(thisMonth);
   } catch (e) {
     document.getElementById('staff-history-list').innerHTML =
@@ -361,6 +401,44 @@ async function refreshStaff() {
   }
 }
 
+function renderTiers(approved) {
+  const host = document.getElementById('tier-list');
+  if (!host) return;
+  let html = '';
+  TIERS.forEach(t => {
+    const earned = approved >= t.n;
+    const isNext = approved === t.n - 1;
+    html += `<div class="tier-row ${earned ? 'earned' : isNext ? 'next' : ''}">
+      <div style="display:flex;align-items:center;">
+        <span class="stars">${'★'.repeat(t.n)}</span>
+        <div style="margin-left:9px;">
+          <div class="tier-name">${t.label}</div>
+          <div class="tier-sub">${t.sub}</div>
+        </div>
+      </div>
+      <div class="tier-amt" style="color:${earned ? 'var(--green)' : isNext ? 'var(--purple)' : 'var(--text3)'};">${fmtINR(t.amt)}</div>
+    </div>`;
+  });
+  html += `<div class="tier-row ${approved >= 6 ? 'earned' : ''}">
+    <div style="display:flex;align-items:center;">
+      <span class="stars">★★★★★<span style="font-size:10px;">+</span></span>
+      <div style="margin-left:9px;">
+        <div class="tier-name">6th-10th review</div>
+        <div class="tier-sub">Every additional review</div>
+      </div>
+    </div>
+    <div class="tier-amt" style="color:${approved >= 6 ? 'var(--green)' : 'var(--purple)'};">₹2,000 each</div>
+  </div>`;
+  host.innerHTML = html;
+}
+
+function renderTerms() {
+  const host = document.getElementById('terms-list');
+  if (!host) return;
+  host.innerHTML = TERMS.map((t, i) =>
+    `<div class="check-item"><div class="check-dot" style="${i === TERMS.length - 1 ? 'background:var(--text3);opacity:.5;' : ''}"></div><span style="${i === TERMS.length - 1 ? 'opacity:.6;' : ''}">${escapeHtml(t)}</span></div>`
+  ).join('');
+}
 async function renderStaffHistory(reviews) {
   const host = document.getElementById('staff-history-list');
   if (!reviews.length) {
@@ -427,6 +505,11 @@ async function loadAdminList(status) {
     if (status === 'pending') {
       document.getElementById('admin-pending-count').textContent = reviews.length;
       document.getElementById('admin-pending-plural').textContent = reviews.length === 1 ? '' : 's';
+      const badge = document.getElementById('admin-pending-badge');
+      if (badge) {
+        badge.textContent = reviews.length;
+        badge.classList.toggle('hidden', reviews.length === 0);
+      }
     }
     if (!reviews.length) {
       host.innerHTML = `<div style="text-align:center;padding:2.5rem;color:var(--text3);font-size:13px;">No ${status} reviews.</div>`;
