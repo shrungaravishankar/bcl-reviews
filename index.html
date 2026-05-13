@@ -91,6 +91,8 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
 .check-dot{width:7px;height:7px;border-radius:50%;background:var(--purple);margin-top:6px;flex-shrink:0}
 .divider{border:none;border-top:1px solid var(--border);margin:14px 0}
 .tab-badge{background:var(--gold-light);color:var(--amber);font-size:11px;padding:1px 7px;border-radius:10px;margin-left:4px;font-weight:600}
+.announcement-banner{background:linear-gradient(135deg,var(--purple-deepest),#3C3489);color:white;border-radius:var(--radius);padding:12px 18px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.month-picker{background:#3C3489;color:white;border:1px solid rgba(255,255,255,.35);border-radius:20px;padding:4px 24px 4px 10px;font-size:12px;cursor:pointer;font-family:inherit;outline:none;appearance:none;-webkit-appearance:none}
 @media(max-width:480px){.page{padding:16px 12px 50px}.login-card{padding:28px 20px}.top-bar-count{font-size:22px}}
 </style>
 </head>
@@ -161,10 +163,20 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
         <div class="top-bar-sub">Pending counts toward limit</div>
       </div>
       <div style="text-align:right;">
+        <div id="staff-month-picker-host" style="margin-bottom:5px;"></div>
         <div style="font-size:13px;color:#9FE1CB;font-weight:500;">Earned: <span id="staff-earned">₹0</span></div>
         <div style="font-size:12px;opacity:.6;margin-top:2px;">Next: <span id="staff-next">₹1,000</span></div>
       </div>
       <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:white;border-color:rgba(255,255,255,.2);" id="staff-signout">Sign out</button>
+    </div>
+
+    <div id="staff-announcement" class="announcement-banner hidden">
+      <span style="font-size:18px;">📢</span>
+      <div id="staff-announcement-text" style="font-size:13px;"></div>
+    </div>
+
+    <div id="submit-lock-notice" class="alert alert-warning hidden" style="margin-bottom:14px;">
+      📅 Viewing <strong id="lock-month-label"></strong> — past month. You can review history but cannot submit new reviews.
     </div>
 
   <div class="tabs">
@@ -271,9 +283,22 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
         <div id="inv-error" class="alert alert-danger hidden" style="margin-bottom:10px"></div>
         <button class="btn btn-primary" id="inv-btn">Send invite</button>
       </div>
+
+      <div class="card">
+        <div class="section-label">Announcement banner</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Post a message that all staff see when they sign in. Leave blank and click Clear to remove the banner.</div>
+        <textarea id="announcement-input" style="min-height:70px;resize:vertical;margin-bottom:10px;width:100%;padding:10px 13px;border:1px solid var(--border2);border-radius:6px;font-family:inherit;font-size:14px;" placeholder="e.g. May payouts will be processed on 31st May. Keep collecting those reviews!"></textarea>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-primary btn-sm" id="ann-save-btn">Post announcement</button>
+          <button class="btn btn-sm" id="ann-clear-btn">Clear</button>
+        </div>
+        <div id="ann-saved-msg" class="hidden" style="font-size:13px;color:var(--green);margin-top:8px;">Saved ✓</div>
+      </div>
     </div>
   </div>
 </div>
+
+<!-- IMAGE LIGHTBOX -->
 
 <!-- IMAGE LIGHTBOX -->
 <div id="lightbox" class="hidden modal-bg" style="background:rgba(0,0,0,.85);cursor:zoom-out;">
