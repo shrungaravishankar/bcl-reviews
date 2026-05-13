@@ -15,6 +15,7 @@ export const storage = defineStorage({
   access: (allow) => ({
     'reviews/{entity_id}/*': [
       allow.entity('identity').to(['read', 'write', 'delete']),
+      allow.groups(['staff']).to(['read', 'write', 'delete']),
       allow.groups(['admin']).to(['read', 'write', 'delete']),
     ],
   }),
