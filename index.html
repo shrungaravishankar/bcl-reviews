@@ -250,17 +250,26 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
         <div class="top-bar-title">Admin Dashboard — BCL Globiz</div>
         <div style="display:flex;align-items:baseline;gap:8px;"><span class="top-bar-count" id="admin-pending-count">0</span><span style="font-size:13px;opacity:.6;">pending review<span id="admin-pending-plural">s</span></span></div>
       </div>
+      <div style="text-align:right;">
+        <div id="admin-month-picker-host" style="margin-bottom:5px;"></div>
+      </div>
       <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:white;border-color:rgba(255,255,255,.2);" id="admin-signout">Sign out</button>
     </div>
 
     <div class="tabs">
-      <button class="tab active" data-atab="pending">Pending <span id="admin-pending-badge" class="tab-badge hidden">0</span></button>
+      <button class="tab active" data-atab="overview">Overview</button>
+      <button class="tab" data-atab="pending">Pending <span id="admin-pending-badge" class="tab-badge hidden">0</span></button>
       <button class="tab" data-atab="approved">Approved</button>
       <button class="tab" data-atab="rejected">Rejected</button>
+      <button class="tab" data-atab="leaderboard">Leaderboard</button>
+      <button class="tab" data-atab="payouts">Payouts</button>
       <button class="tab" data-atab="users">Users</button>
     </div>
 
-    <div id="admin-tab-pending">
+    <div id="admin-tab-overview">
+      <div id="admin-overview-content"><div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div></div>
+    </div>
+    <div id="admin-tab-pending" class="hidden">
       <div class="card"><div id="admin-pending-list"><div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div></div></div>
     </div>
     <div id="admin-tab-approved" class="hidden">
@@ -268,6 +277,12 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
     </div>
     <div id="admin-tab-rejected" class="hidden">
       <div class="card"><div id="admin-rejected-list"><div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div></div></div>
+    </div>
+    <div id="admin-tab-leaderboard" class="hidden">
+      <div id="admin-leaderboard-content"><div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div></div>
+    </div>
+    <div id="admin-tab-payouts" class="hidden">
+      <div class="card"><div class="section-label">Monthly payout summary</div><div class="alert alert-info" style="margin-bottom:14px;">Export the month's approved-review payouts for your accounts team.</div><div id="admin-payout-content"><div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div></div></div>
     </div>
     <div id="admin-tab-users" class="hidden">
       <div class="card">
