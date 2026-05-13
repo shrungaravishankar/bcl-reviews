@@ -9,12 +9,13 @@ frontend:
   phases:
     build:
       commands:
-        - echo "Static site - nothing to build."
+        - npx esbuild amplify-entry.js --bundle --format=esm --platform=browser --target=es2022 --minify --outfile=amplify-bundle.js
   artifacts:
     baseDirectory: .
     files:
       - 'index.html'
       - 'app.js'
+      - 'amplify-bundle.js'
       - 'amplify_outputs.json'
       - 'manifest.webmanifest'
       - 'icon.svg'
