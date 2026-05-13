@@ -77,17 +77,22 @@ function monthPickerHTML(id) {
 
 function setMonth(key) {
   selectedMonth = key;
-  const lockEl = document.getElementById('submit-lock-notice');
-  if (lockEl) {
-    const isCurrent = (key === TODAY_KEY);
-    lockEl.classList.toggle('hidden', isCurrent);
-    const lblEl = document.getElementById('lock-month-label');
-    if (lblEl) {
-      const monthLabel = MONTH_LIST.find(m => m.key === key)?.label || key;
-      lblEl.textContent = monthLabel;
+  if (currentRole === 'staff') {
+    const lockEl = document.getElementById('submit-lock-notice');
+    if (lockEl) {
+      const isCurrent = (key === TODAY_KEY);
+      lockEl.classList.toggle('hidden', isCurrent);
+      const lblEl = document.getElementById('lock-month-label');
+      if (lblEl) {
+        const monthLabel = MONTH_LIST.find(m => m.key === key)?.label || key;
+        lblEl.textContent = monthLabel;
+      }
     }
+    refreshStaff();
+  } else if (currentRole === 'admin') {
+    const activeTab = document.querySelector('#admin-wrap .tab.active');
+    if (activeTab) switchAdminTab(activeTab.dataset.atab);
   }
-  if (currentRole === 'staff') refreshStaff();
 }
 
 // ----------------------------- BOOT ----------------------------------------
@@ -536,7 +541,14 @@ async function renderStaffHistory(reviews) {
 function showAdmin() {
   hideAllScreens();
   document.getElementById('admin-wrap').classList.remove('hidden');
-  switchAdminTab('pending');
+  selectedMonth = TODAY_KEY;
+  const mpHost = document.getElementById('admin-month-picker-host');
+  if (mpHost) {
+    mpHost.innerHTML = monthPickerHTML('admin-month-sel');
+    const sel = document.getElementById('admin-month-sel');
+    if (sel) sel.addEventListener('change', e => setMonth(e.target.value));
+  }
+  switchAdminTab('overview');
   loadAdminAnnouncement();
 }
 document.querySelectorAll('#admin-wrap .tab').forEach(t => {
@@ -544,21 +556,30 @@ document.querySelectorAll('#admin-wrap .tab').forEach(t => {
 });
 function switchAdminTab(name) {
   document.querySelectorAll('#admin-wrap .tab').forEach(t => t.classList.toggle('active', t.dataset.atab === name));
-  ['pending','approved','rejected','users'].forEach(n => {
-    document.getElementById('admin-tab-' + n).classList.toggle('hidden', n !== name);
+  ['overview','pending','approved','rejected','leaderboard','payouts','users'].forEach(n => {
+    const el = document.getElementById('admin-tab-' + n);
+    if (el) el.classList.toggle('hidden', n !== name);
   });
+  if (name === 'overview') renderOverview();
   if (name === 'pending') loadAdminList('pending');
   if (name === 'approved') loadAdminList('approved');
   if (name === 'rejected') loadAdminList('rejected');
+  if (name === 'leaderboard') renderLeaderboard();
+  if (name === 'payouts') renderPayoutPreview();
 }
 
 async function loadAdminList(status) {
   const host = document.getElementById('admin-' + status + '-list');
   host.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div>';
   try {
+    // Pending always shows all months (admin's action queue).
+    // Approved/Rejected filter by the selected month.
+    const filter = status === 'pending'
+      ? { status: { eq: status } }
+      : { status: { eq: status }, monthKey: { eq: selectedMonth } };
     const res = await client.models.Review.list({
-      filter: { status: { eq: status } },
-      limit: 200,
+      filter,
+      limit: 500,
     });
     if (res.errors?.length) throw new Error(res.errors[0].message);
     const reviews = res.data || [];
@@ -830,3 +851,241 @@ const annSaveBtn = document.getElementById('ann-save-btn');
 const annClearBtn = document.getElementById('ann-clear-btn');
 if (annSaveBtn) annSaveBtn.addEventListener('click', saveAnnouncementClick);
 if (annClearBtn) annClearBtn.addEventListener('click', clearAnnouncementClick);
+// ----------------------------- ADMIN DATA FOR THE SELECTED MONTH -----------
+async function loadAdminMonth() {
+  try {
+    const res = await client.models.Review.list({
+      filter: { monthKey: { eq: selectedMonth } },
+      limit: 500
+    });
+    if (res.errors?.length) return [];
+    return res.data || [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function monthLabelOf(key) {
+  return MONTH_LIST.find(m => m.key === key)?.label || key;
+}
+
+// ----------------------------- OVERVIEW TAB --------------------------------
+async function renderOverview() {
+  const host = document.getElementById('admin-overview-content');
+  if (!host) return;
+  host.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div>';
+  const [monthReviews, pendingRes] = await Promise.all([
+    loadAdminMonth(),
+    client.models.Review.list({ filter: { status: { eq: 'pending' } }, limit: 500 }).catch(() => ({ data: [] }))
+  ]);
+  const globalPending = (pendingRes?.data || []).length;
+  const byUser = {};
+  let totalApproved = 0, totalPayout = 0;
+  monthReviews.forEach(r => {
+    const uname = r.userName || 'Unknown';
+    if (!byUser[uname]) byUser[uname] = { name: uname, approved: 0, pending: 0, rejected: 0 };
+    if (r.status === 'approved') { byUser[uname].approved++; totalApproved++; }
+    else if (r.status === 'pending') byUser[uname].pending++;
+    else if (r.status === 'rejected') byUser[uname].rejected++;
+  });
+  Object.values(byUser).forEach(u => { u.earnings = calcEarnings(u.approved); totalPayout += u.earnings; });
+  const ranked = Object.values(byUser).sort((a, b) => b.approved - a.approved);
+
+  const html = `
+    <div class="stats-grid" style="margin-bottom:14px;">
+      <div class="stat-box"><div class="stat-lbl">Approved reviews</div><div class="stat-val purple">${totalApproved}</div></div>
+      <div class="stat-box"><div class="stat-lbl">Total payout</div><div class="stat-val green" style="font-size:17px;">${fmtINR(totalPayout)}</div></div>
+      <div class="stat-box"><div class="stat-lbl">Pending (all months)</div><div class="stat-val amber">${globalPending}</div></div>
+      <div class="stat-box"><div class="stat-lbl">Active staff</div><div class="stat-val" style="font-size:17px;">${ranked.length}</div></div>
+    </div>
+    <div class="card">
+      <div class="section-label">Staff performance — ${escapeHtml(monthLabelOf(selectedMonth))}</div>
+      ${ranked.length === 0
+        ? '<div style="text-align:center;padding:2rem;color:var(--text3);font-size:13px;">No reviews in this month yet.</div>'
+        : ranked.map(u => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border);">
+              <div>
+                <div style="font-size:14px;font-weight:500;">${escapeHtml(u.name)}</div>
+                <div style="font-size:11px;color:var(--text3);">${u.approved} approved · ${u.pending} pending · ${u.rejected} rejected</div>
+              </div>
+              <div style="text-align:right;font-size:14px;font-weight:600;color:var(--green);">${fmtINR(u.earnings)}</div>
+            </div>
+          `).join('')
+      }
+    </div>
+  `;
+  host.innerHTML = html;
+}
+
+// ----------------------------- LEADERBOARD TAB -----------------------------
+async function renderLeaderboard() {
+  const host = document.getElementById('admin-leaderboard-content');
+  if (!host) return;
+  host.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div>';
+  const monthReviews = await loadAdminMonth();
+  const byUser = {};
+  const platforms = { Google: 0, Trustpilot: 0, Other: 0 };
+  monthReviews.forEach(r => {
+    if (r.status !== 'approved') return;
+    const uname = r.userName || 'Unknown';
+    if (!byUser[uname]) byUser[uname] = { name: uname, approved: 0 };
+    byUser[uname].approved++;
+    const p = (r.platform || 'Google');
+    if (p === 'Google') platforms.Google++;
+    else if (p === 'Trustpilot') platforms.Trustpilot++;
+    else platforms.Other++;
+  });
+  Object.values(byUser).forEach(u => { u.earnings = calcEarnings(u.approved); });
+  const ranked = Object.values(byUser).sort((a, b) => b.approved - a.approved);
+  const totalPlatform = platforms.Google + platforms.Trustpilot + platforms.Other;
+  const pct = n => totalPlatform > 0 ? Math.round((n / totalPlatform) * 100) : 0;
+
+  const html = `
+    <div class="card">
+      <div class="section-label">🏆 Leaderboard — ${escapeHtml(monthLabelOf(selectedMonth))}</div>
+      ${ranked.length === 0
+        ? '<div style="text-align:center;padding:2rem;color:var(--text3);font-size:13px;">No approved reviews in this month yet.</div>'
+        : ranked.map((u, i) => `
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:6px;margin-bottom:7px;background:${i === 0 ? 'var(--gold-light)' : 'var(--surface2)'};">
+              <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:${i === 0 ? 'var(--gold)' : 'var(--purple)'};color:white;">${i+1}</div>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:500;">${escapeHtml(u.name)}</div>
+                <div style="font-size:11px;color:var(--text3);">${u.approved} approved</div>
+              </div>
+              <div style="text-align:right;font-size:14px;font-weight:600;color:var(--green);">${fmtINR(u.earnings)}</div>
+            </div>
+          `).join('')
+      }
+    </div>
+    <div class="card">
+      <div class="section-label">Platform split</div>
+      ${totalPlatform === 0 ? '<div style="text-align:center;color:var(--text3);font-size:13px;padding:1rem;">No approved reviews yet.</div>' : `
+        <div style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:6px;">
+          <span style="flex:1;">Google</span>
+          <span style="color:var(--text3);">${platforms.Google} (${pct(platforms.Google)}%)</span>
+        </div>
+        <div class="progress-bg" style="height:8px;margin-bottom:14px;"><div class="progress-fill" style="width:${pct(platforms.Google)}%;background:var(--purple);"></div></div>
+        <div style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:6px;">
+          <span style="flex:1;">Trustpilot</span>
+          <span style="color:var(--text3);">${platforms.Trustpilot} (${pct(platforms.Trustpilot)}%)</span>
+        </div>
+        <div class="progress-bg" style="height:8px;"><div class="progress-fill" style="width:${pct(platforms.Trustpilot)}%;background:var(--green);"></div></div>
+      `}
+    </div>
+  `;
+  host.innerHTML = html;
+}
+
+// ----------------------------- PAYOUTS TAB ---------------------------------
+async function renderPayoutPreview() {
+  const host = document.getElementById('admin-payout-content');
+  if (!host) return;
+  host.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div>';
+  const monthReviews = await loadAdminMonth();
+  const byUser = {};
+  monthReviews.forEach(r => {
+    if (r.status !== 'approved') return;
+    const uname = r.userName || 'Unknown';
+    if (!byUser[uname]) byUser[uname] = { name: uname, approved: 0 };
+    byUser[uname].approved++;
+  });
+  Object.values(byUser).forEach(u => { u.earnings = calcEarnings(u.approved); });
+  const rows = Object.values(byUser).sort((a, b) => a.name.localeCompare(b.name));
+  const totalReviews = rows.reduce((s, u) => s + u.approved, 0);
+  const totalPayout = rows.reduce((s, u) => s + u.earnings, 0);
+  const monthLabel = monthLabelOf(selectedMonth);
+
+  if (rows.length === 0) {
+    host.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--text3);font-size:13px;">No approved reviews to pay out for <strong>${escapeHtml(monthLabel)}</strong>.</div>`;
+    return;
+  }
+
+  const html = `
+    <div style="margin-bottom:12px;font-size:13px;color:var(--text2);">Payout summary for <strong>${escapeHtml(monthLabel)}</strong></div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:var(--surface2);">
+          <th style="text-align:left;padding:10px;border-bottom:1px solid var(--border);">Staff name</th>
+          <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border);">Approved</th>
+          <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border);">Payout</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(u => `
+            <tr>
+              <td style="padding:10px;border-bottom:1px solid var(--border);">${escapeHtml(u.name)}</td>
+              <td style="text-align:right;padding:10px;border-bottom:1px solid var(--border);">${u.approved}</td>
+              <td style="text-align:right;padding:10px;border-bottom:1px solid var(--border);font-weight:600;color:var(--green);">${fmtINR(u.earnings)}</td>
+            </tr>
+          `).join('')}
+          <tr style="background:var(--surface2);font-weight:600;">
+            <td style="padding:10px;">Total</td>
+            <td style="text-align:right;padding:10px;">${totalReviews}</td>
+            <td style="text-align:right;padding:10px;color:var(--green);">${fmtINR(totalPayout)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="payout-csv-btn">⬇ Download CSV</button>
+      <button class="btn" id="payout-print-btn">🖨 Print / PDF</button>
+    </div>
+  `;
+  host.innerHTML = html;
+  document.getElementById('payout-csv-btn').addEventListener('click', () => exportPayoutCSV(rows, totalReviews, totalPayout, monthLabel));
+  document.getElementById('payout-print-btn').addEventListener('click', () => printPayout(rows, totalReviews, totalPayout, monthLabel));
+}
+
+function exportPayoutCSV(rows, totalReviews, totalPayout, monthLabel) {
+  const csvEscape = s => `"${String(s || '').replace(/"/g, '""')}"`;
+  const lines = [
+    `BCL Globiz Review Rewards - Payout Summary`,
+    `Month,${csvEscape(monthLabel)}`,
+    `Generated,${csvEscape(new Date().toLocaleString('en-IN'))}`,
+    ``,
+    `Staff name,Approved reviews,Payout amount (INR)`,
+    ...rows.map(u => `${csvEscape(u.name)},${u.approved},${u.earnings}`),
+    `Total,${totalReviews},${totalPayout}`
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `BCL-payout-${selectedMonth}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function printPayout(rows, totalReviews, totalPayout, monthLabel) {
+  const w = window.open('', '_blank');
+  if (!w) { toast('Pop-up blocked. Allow pop-ups to print.', 'warning'); return; }
+  const html = `<!DOCTYPE html><html><head><title>BCL Payout - ${escapeHtml(monthLabel)}</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:30px;color:#1a1a1a;max-width:800px;margin:0 auto;}
+h1{font-size:18px;margin:0 0 4px;color:#26215C;}
+.sub{font-size:13px;color:#666;margin-bottom:24px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;padding:10px;border-bottom:2px solid #333;background:#f5f5f5;}
+td{padding:10px;border-bottom:1px solid #ddd;}
+.right{text-align:right;}
+.total{background:#f5f5f5;font-weight:600;}
+.foot{margin-top:30px;font-size:11px;color:#999;}
+button{margin-top:20px;padding:10px 20px;background:#534AB7;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;}
+@media print{button{display:none;}}
+</style></head><body>
+<h1>BCL Globiz — Review Rewards Payout</h1>
+<div class="sub">${escapeHtml(monthLabel)} · Generated ${new Date().toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'})}</div>
+<table>
+  <thead><tr><th>Staff name</th><th class="right">Approved reviews</th><th class="right">Payout amount</th></tr></thead>
+  <tbody>
+    ${rows.map(u => `<tr><td>${escapeHtml(u.name)}</td><td class="right">${u.approved}</td><td class="right">₹${u.earnings.toLocaleString('en-IN')}</td></tr>`).join('')}
+    <tr class="total"><td>Total</td><td class="right">${totalReviews}</td><td class="right">₹${totalPayout.toLocaleString('en-IN')}</td></tr>
+  </tbody>
+</table>
+<p class="foot">Generated by BCL Review Rewards system.</p>
+<button onclick="window.print()">Print</button>
+</body></html>`;
+  w.document.write(html);
+  w.document.close();
+}
