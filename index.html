@@ -78,6 +78,19 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
 .full-spinner .spinner{width:36px;height:36px;border-width:3px;margin:0}
 .modal-bg{position:fixed;inset:0;z-index:10001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);padding:20px}
 .modal-card{background:white;border-radius:14px;padding:24px;max-width:480px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.2)}
+.progress-bg{background:var(--surface2);border-radius:20px;height:7px;overflow:hidden}
+.progress-fill{height:100%;background:var(--purple);border-radius:20px;transition:width .5s ease}
+.tier-row{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-radius:var(--radius-sm);margin-bottom:7px;background:var(--surface2)}
+.tier-row.earned{background:var(--green-light)}
+.tier-row.next{background:var(--purple-light);border:1px solid var(--purple-mid)}
+.stars{color:var(--gold);font-size:13px}
+.tier-name{font-size:13px;font-weight:500}
+.tier-sub{font-size:11px;color:var(--text3)}
+.tier-amt{font-size:14px;font-weight:600}
+.check-item{display:flex;gap:9px;padding:5px 0;font-size:13px;color:var(--text2);align-items:flex-start}
+.check-dot{width:7px;height:7px;border-radius:50%;background:var(--purple);margin-top:6px;flex-shrink:0}
+.divider{border:none;border-top:1px solid var(--border);margin:14px 0}
+.tab-badge{background:var(--gold-light);color:var(--amber);font-size:11px;padding:1px 7px;border-radius:10px;margin-left:4px;font-weight:600}
 @media(max-width:480px){.page{padding:16px 12px 50px}.login-card{padding:28px 20px}.top-bar-count{font-size:22px}}
 </style>
 </head>
@@ -154,12 +167,26 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
       <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:white;border-color:rgba(255,255,255,.2);" id="staff-signout">Sign out</button>
     </div>
 
-    <div class="tabs">
+  <div class="tabs">
       <button class="tab active" data-tab="submit">Submit Review</button>
       <button class="tab" data-tab="history">My History</button>
+      <button class="tab" data-tab="tiers">Reward Tiers</button>
     </div>
 
-    <div id="staff-tab-submit">
+<div id="staff-tab-submit">
+      <div class="card">
+        <div class="section-label">Progress this month</div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;">
+          <span id="prog-label">0 of 5 tiers complete</span>
+          <span style="color:var(--purple);font-weight:600;" id="prog-pct">0%</span>
+        </div>
+        <div class="progress-bg"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+        <div class="stats-grid" style="margin-top:14px;">
+          <div class="stat-box"><div class="stat-lbl">Reviews</div><div class="stat-val purple" id="ps-count">0</div></div>
+          <div class="stat-box"><div class="stat-lbl">Earned</div><div class="stat-val green" id="ps-earned" style="font-size:17px;">₹0</div></div>
+          <div class="stat-box"><div class="stat-lbl">Max possible</div><div class="stat-val" style="font-size:15px;color:var(--text3);">₹17,500</div></div>
+        </div>
+      </div>
       <div class="card">
         <div class="section-label">Submit a new review screenshot</div>
         <div id="staff-upload-zone" class="upload-zone">
@@ -169,6 +196,9 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
         </div>
         <input type="file" id="staff-file" accept="image/*" style="display:none"/>
         <img id="staff-preview" class="preview-img hidden" alt="Preview"/>
+        <div id="staff-verify-area" class="hidden" style="margin-top:14px;">
+          <div id="staff-verify-result"></div>
+        </div>
         <div id="staff-submit-area" class="hidden" style="margin-top:14px;text-align:right;">
           <button class="btn btn-success" id="staff-submit-btn">Submit for approval →</button>
         </div>
@@ -176,10 +206,25 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
       </div>
     </div>
 
-    <div id="staff-tab-history" class="hidden">
+<div id="staff-tab-history" class="hidden">
       <div class="card">
         <div class="section-label">Submitted reviews — this month</div>
         <div id="staff-history-list"><div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div></div>
+      </div>
+    </div>
+
+    <div id="staff-tab-tiers" class="hidden">
+      <div class="card">
+        <div class="section-label">Monthly reward tiers</div>
+        <div id="tier-list"></div>
+        <hr class="divider"/>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text2);margin-bottom:6px;"><span>Complete all 5 tiers</span><span style="font-weight:600;color:var(--text);">₹7,500</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text2);margin-bottom:8px;"><span>6th–10th review (₹2,000 each)</span><span style="font-weight:600;color:var(--purple);">+₹10,000 max</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:600;padding-top:8px;border-top:1px solid var(--border);"><span>Maximum monthly earning</span><span style="color:var(--purple);">₹17,500</span></div>
+      </div>
+      <div class="card">
+        <div class="section-label">Terms &amp; conditions</div>
+        <div id="terms-list"></div>
       </div>
     </div>
   </div>
@@ -197,7 +242,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
     </div>
 
     <div class="tabs">
-      <button class="tab active" data-atab="pending">Pending</button>
+      <button class="tab active" data-atab="pending">Pending <span id="admin-pending-badge" class="tab-badge hidden">0</span></button>
       <button class="tab" data-atab="approved">Approved</button>
       <button class="tab" data-atab="rejected">Rejected</button>
       <button class="tab" data-atab="users">Users</button>
