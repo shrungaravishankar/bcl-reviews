@@ -566,6 +566,7 @@ function switchAdminTab(name) {
   if (name === 'rejected') loadAdminList('rejected');
   if (name === 'leaderboard') renderLeaderboard();
   if (name === 'payouts') renderPayoutPreview();
+  if (name === 'users') loadUsersList();
 }
 
 async function loadAdminList(status) {
@@ -700,11 +701,12 @@ document.getElementById('inv-btn').addEventListener('click', async () => {
   try {
     const res = await client.mutations.inviteUser({ email, fullName: name, role });
     if (res.errors?.length) throw new Error(res.errors[0].message);
-    const out = res.data || {};
+    const out = parseJsonData(res.data);
     if (out.ok) {
       toast(`Invite sent. ${email} will get a welcome email from Cognito with a temporary password.`, 'success');
       document.getElementById('inv-name').value = '';
       document.getElementById('inv-email').value = '';
+      loadUsersList();
     } else {
       errEl.textContent = out.error || 'Unknown error.';
       errEl.classList.remove('hidden');
@@ -716,6 +718,86 @@ document.getElementById('inv-btn').addEventListener('click', async () => {
     btn.disabled = false; btn.innerHTML = 'Send invite';
   }
 });
+
+// ----------------------------- TEAM MEMBERS (admin) ------------------------
+// AppSync returns a.json() results as a JSON string — parse defensively.
+function parseJsonData(d) {
+  if (d == null) return {};
+  try { return typeof d === 'string' ? JSON.parse(d) : d; }
+  catch { return {}; }
+}
+
+async function loadUsersList() {
+  const host = document.getElementById('users-list-host');
+  if (!host) return;
+  host.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text3);font-size:13px;"><span class="spinner"></span>Loading users…</div>';
+  try {
+    const res = await client.queries.listAppUsers();
+    if (res.errors?.length) throw new Error(res.errors[0].message);
+    const out = parseJsonData(res.data);
+    if (out.error) throw new Error(out.error);
+    renderUsersList(out.users || []);
+  } catch (e) {
+    host.innerHTML = `<div class="alert alert-danger">Could not load users: ${e.message || e}</div>`;
+  }
+}
+
+function renderUsersList(users) {
+  const host = document.getElementById('users-list-host');
+  if (!host) return;
+  if (!users.length) {
+    host.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text3);font-size:13px;">No users yet.</div>';
+    return;
+  }
+  host.innerHTML = users.map(u => {
+    const pending = u.status === 'FORCE_CHANGE_PASSWORD';
+    const statusLabel = pending ? 'Invite pending' : (u.status === 'CONFIRMED' ? 'Active' : u.status);
+    const statusClass = pending ? 'badge-pending' : (u.status === 'CONFIRMED' ? 'badge-approved' : 'badge-rejected');
+    const roleLabel = (u.role && u.role !== 'none') ? u.role : 'no role';
+    return `<div class="history-row">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:600;">${escapeHtml(u.name || u.email)}</div>
+        <div style="font-size:11px;color:var(--text3);">${escapeHtml(u.email)} · ${escapeHtml(roleLabel)}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        <span class="badge ${statusClass}">${escapeHtml(statusLabel)}</span>
+        ${pending ? `<button class="btn btn-sm" data-resend="${escapeAttr(u.email)}">Resend</button>` : ''}
+        <button class="btn btn-danger btn-sm" data-deluser="${escapeAttr(u.email)}">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+  host.querySelectorAll('[data-resend]').forEach(b => b.addEventListener('click', () => resendInvite(b.dataset.resend)));
+  host.querySelectorAll('[data-deluser]').forEach(b => b.addEventListener('click', () => deleteUser(b.dataset.deluser)));
+}
+
+async function resendInvite(email) {
+  try {
+    const res = await client.mutations.manageUser({ email, action: 'resend' });
+    if (res.errors?.length) throw new Error(res.errors[0].message);
+    const out = parseJsonData(res.data);
+    if (!out.ok) throw new Error(out.error || 'Failed to resend.');
+    toast(out.message || 'Invite re-sent.', 'success');
+  } catch (e) {
+    toast('Resend failed: ' + (e.message || e), 'danger');
+  }
+}
+
+async function deleteUser(email) {
+  if (!confirm(`Delete ${email}? This permanently removes their login and cannot be undone.`)) return;
+  try {
+    const res = await client.mutations.manageUser({ email, action: 'delete' });
+    if (res.errors?.length) throw new Error(res.errors[0].message);
+    const out = parseJsonData(res.data);
+    if (!out.ok) throw new Error(out.error || 'Failed to delete.');
+    toast(out.message || 'User deleted.', 'success');
+    loadUsersList();
+  } catch (e) {
+    toast('Delete failed: ' + (e.message || e), 'danger');
+  }
+}
+
+const usersRefreshBtn = document.getElementById('users-refresh-btn');
+if (usersRefreshBtn) usersRefreshBtn.addEventListener('click', loadUsersList);
 
 // ----------------------------- HELPERS -------------------------------------
 function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }

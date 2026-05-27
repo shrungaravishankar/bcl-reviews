@@ -1,5 +1,7 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { inviteUser } from '../functions/invite-user/resource';
+import { listAppUsers } from '../functions/list-app-users/resource';
+import { manageUser } from '../functions/manage-user/resource';
 
 /**
  * DynamoDB-backed schema exposed via AppSync GraphQL.
@@ -73,8 +75,30 @@ const schema = a
       .returns(a.json())
       .authorization((allow) => [allow.group('admin')])
       .handler(a.handler.function(inviteUser)),
+
+    /** Admin: list all Cognito users with status + role. */
+    listAppUsers: a
+      .query()
+      .returns(a.json())
+      .authorization((allow) => [allow.group('admin')])
+      .handler(a.handler.function(listAppUsers)),
+
+    /** Admin: resend an invite ('resend') or delete a user ('delete'). */
+    manageUser: a
+      .mutation()
+      .arguments({
+        email: a.string().required(),
+        action: a.string().required(),
+      })
+      .returns(a.json())
+      .authorization((allow) => [allow.group('admin')])
+      .handler(a.handler.function(manageUser)),
   })
-  .authorization((allow) => [allow.resource(inviteUser)]);
+  .authorization((allow) => [
+    allow.resource(inviteUser),
+    allow.resource(listAppUsers),
+    allow.resource(manageUser),
+  ]);
 
 export type Schema = ClientSchema<typeof schema>;
 

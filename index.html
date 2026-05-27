@@ -300,6 +300,14 @@ input:focus,textarea:focus{outline:none;border-color:var(--purple);box-shadow:0 
       </div>
 
       <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div class="section-label" style="margin-bottom:0;">Team members</div>
+          <button class="btn btn-sm" id="users-refresh-btn">Refresh</button>
+        </div>
+        <div id="users-list-host"><div style="text-align:center;padding:1.5rem;color:var(--text3);font-size:13px;"><span class="spinner"></span>Loading users…</div></div>
+      </div>
+
+      <div class="card">
         <div class="section-label">Announcement banner</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Post a message that all staff see when they sign in. Leave blank and click Clear to remove the banner.</div>
         <textarea id="announcement-input" style="min-height:70px;resize:vertical;margin-bottom:10px;width:100%;padding:10px 13px;border:1px solid var(--border2);border-radius:6px;font-family:inherit;font-size:14px;" placeholder="e.g. May payouts will be processed on 31st May. Keep collecting those reviews!"></textarea>
