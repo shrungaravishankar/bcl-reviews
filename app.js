@@ -16,16 +16,6 @@ import {
 } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl, remove as removeFromStorage } from 'aws-amplify/storage';
-import { db, firebaseAuth } from './firebase.js';
-import { signInWithCustomToken } from 'firebase/auth';
-import {
-  collection, doc, addDoc, updateDoc, deleteDoc, getDocs,
-  query, where, limit as fbLimit
-} from 'firebase/firestore';
-
-const reviewsCol = () => collection(db, 'reviews');
-const announcementsCol = () => collection(db, 'announcements');
-const snapToRows = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
 // ----------------------------- TIERS / EARNINGS ---------------------------
 const TIERS = [
@@ -112,11 +102,10 @@ function bootMessage(t) { bootMsg.textContent = t; }
 function hideBoot() { bootSpinner.classList.add('hidden'); }
 function showBoot(t) { bootSpinner.classList.remove('hidden'); bootMessage(t); }
 
-let client; // Amplify client (used only for inviteUser + token exchange)
+let client; // Amplify Data client
 let currentRole = null;
 let currentEmail = null;
 let currentName = null;
-let currentUid = null; // Firebase uid (= Cognito sub); owner key for Firestore rows
 
 (async function boot() {
   try {
@@ -128,7 +117,6 @@ let currentUid = null; // Firebase uid (= Cognito sub); owner key for Firestore 
     client = generateClient({ authMode: 'userPool' });
 
     bootMessage('Checking session…');
-    // (Firebase sign-in happens in loadProfileAndRoute, once we have a session.)
     try {
       const user = await getCurrentUser();
       currentEmail = user.signInDetails?.loginId || user.username;
@@ -165,35 +153,8 @@ async function loadProfileAndRoute() {
     return;
   }
 
-  // Bridge the Cognito session into Firebase so Firestore reads/writes carry
-  // request.auth.uid + the role claim that firestore.rules enforces.
-  try {
-    await ensureFirebaseSignedIn();
-  } catch (e) {
-    hideBoot();
-    showLogin();
-    showLoginError('Could not connect to the data backend: ' + (e.message || e));
-    await signOut().catch(() => {});
-    return;
-  }
-
   if (currentRole === 'admin') showAdmin();
   else showStaff();
-}
-
-// Exchange the Cognito session for a Firebase custom token (minted server-side
-// by the exchange-token Lambda) and sign in. uid === Cognito sub.
-async function ensureFirebaseSignedIn() {
-  if (firebaseAuth.currentUser) {
-    currentUid = firebaseAuth.currentUser.uid;
-    return;
-  }
-  const res = await client.mutations.exchangeFirebaseToken();
-  if (res.errors?.length) throw new Error(res.errors[0].message);
-  const payload = typeof res.data === 'string' ? JSON.parse(res.data) : (res.data || {});
-  if (!payload.ok || !payload.token) throw new Error(payload.error || 'No token returned.');
-  const cred = await signInWithCustomToken(firebaseAuth, payload.token);
-  currentUid = cred.user.uid;
 }
 
 // ----------------------------- SCREEN SWITCHING ----------------------------
@@ -362,8 +323,7 @@ document.getElementById('staff-signout').addEventListener('click', doSignOut);
 document.getElementById('admin-signout').addEventListener('click', doSignOut);
 async function doSignOut() {
   try { await signOut(); } catch {}
-  try { await firebaseAuth.signOut(); } catch {}
-  currentRole = currentEmail = currentName = currentUid = null;
+  currentRole = currentEmail = currentName = null;
   showLogin();
 }
 
@@ -435,16 +395,17 @@ document.getElementById('staff-submit-btn').addEventListener('click', async () =
       options: { contentType: pendingFile.type || 'image/jpeg' },
     }).result;
 
-    // Record the review in Firestore with the full S3 path
-    await addDoc(reviewsCol(), {
-      owner: currentUid,
+    // Record the review in DynamoDB with the full path
+    const stored = (await client.models.Review.create({
       userName: currentName || currentEmail,
       monthKey,
       platform: 'Google',
       status: 'pending',
       screenshotPath: resolvedPath,
       submittedAt: new Date().toISOString(),
-    });
+    }));
+
+    if (stored.errors?.length) throw new Error(stored.errors[0].message);
 
     msgEl.innerHTML = '<div class="alert alert-success">✓ Submitted. Admin will review shortly.</div>';
     pendingFile = null;
@@ -464,9 +425,11 @@ document.getElementById('staff-submit-btn').addEventListener('click', async () =
 
 async function refreshStaff() {
   try {
-    // owner-scoped: only this staff member's rows (also enforced by rules)
-    const snap = await getDocs(query(reviewsCol(), where('owner', '==', currentUid)));
-    staffReviews = snapToRows(snap);
+    const res = await client.models.Review.list({
+      // owner-scoped: implicit, only own rows are returned by Amplify auth
+    });
+    if (res.errors?.length) throw new Error(res.errors[0].message);
+    staffReviews = res.data || [];
     const month = selectedMonth;
     const thisMonth = staffReviews.filter(r => r.monthKey === month);
     const approved = thisMonth.filter(r => r.status === 'approved').length;
@@ -611,10 +574,15 @@ async function loadAdminList(status) {
   try {
     // Pending always shows all months (admin's action queue).
     // Approved/Rejected filter by the selected month.
-    const q = status === 'pending'
-      ? query(reviewsCol(), where('status', '==', status))
-      : query(reviewsCol(), where('status', '==', status), where('monthKey', '==', selectedMonth));
-    const reviews = snapToRows(await getDocs(q));
+    const filter = status === 'pending'
+      ? { status: { eq: status } }
+      : { status: { eq: status }, monthKey: { eq: selectedMonth } };
+    const res = await client.models.Review.list({
+      filter,
+      limit: 500,
+    });
+    if (res.errors?.length) throw new Error(res.errors[0].message);
+    const reviews = res.data || [];
     if (status === 'pending') {
       document.getElementById('admin-pending-count').textContent = reviews.length;
       document.getElementById('admin-pending-plural').textContent = reviews.length === 1 ? '' : 's';
@@ -674,11 +642,13 @@ async function renderAdminRow(r, status) {
 
 async function approveReview(id) {
   try {
-    await updateDoc(doc(db, 'reviews', id), {
+    const res = await client.models.Review.update({
+      id,
       status: 'approved',
       decidedAt: new Date().toISOString(),
       decidedBy: currentEmail,
     });
+    if (res.errors?.length) throw new Error(res.errors[0].message);
     toast('Approved.', 'success');
     loadAdminList('pending');
   } catch (e) {
@@ -699,12 +669,14 @@ document.getElementById('reject-confirm').addEventListener('click', async () => 
   if (!text) { document.getElementById('reject-text').style.borderColor = 'var(--red)'; return; }
   document.getElementById('reject-modal').classList.add('hidden');
   try {
-    await updateDoc(doc(db, 'reviews', rejectingId), {
+    const res = await client.models.Review.update({
+      id: rejectingId,
       status: 'rejected',
       adminComment: text,
       decidedAt: new Date().toISOString(),
       decidedBy: currentEmail,
     });
+    if (res.errors?.length) throw new Error(res.errors[0].message);
     toast('Rejected.', 'success');
     loadAdminList('pending');
   } catch (e) {
@@ -784,7 +756,8 @@ async function withdrawReview(id) {
     if (review?.screenshotPath) {
       try { await removeFromStorage({ path: review.screenshotPath }); } catch (_) { /* ignore */ }
     }
-    await deleteDoc(doc(db, 'reviews', id));
+    const res = await client.models.Review.delete({ id });
+    if (res.errors?.length) throw new Error(res.errors[0].message);
     toast('Review withdrawn.', 'success');
     refreshStaff();
   } catch (e) {
@@ -798,8 +771,12 @@ async function loadAnnouncement() {
   const textEl = document.getElementById('staff-announcement-text');
   if (!banner || !textEl) return;
   try {
-    const snap = await getDocs(query(announcementsCol(), where('active', '==', true), fbLimit(1)));
-    const list = snapToRows(snap);
+    const res = await client.models.Announcement.list({
+      filter: { active: { eq: true } },
+      limit: 1
+    });
+    if (res.errors?.length) { banner.classList.add('hidden'); return; }
+    const list = res.data || [];
     if (list.length > 0 && list[0].text) {
       textEl.textContent = list[0].text;
       banner.classList.remove('hidden');
@@ -815,8 +792,12 @@ async function loadAdminAnnouncement() {
   const input = document.getElementById('announcement-input');
   if (!input) return;
   try {
-    const snap = await getDocs(query(announcementsCol(), where('active', '==', true), fbLimit(1)));
-    const list = snapToRows(snap);
+    const res = await client.models.Announcement.list({
+      filter: { active: { eq: true } },
+      limit: 1
+    });
+    if (res.errors?.length) return;
+    const list = res.data || [];
     input.value = list[0]?.text || '';
   } catch (_) { /* ignore */ }
 }
@@ -829,11 +810,12 @@ async function saveAnnouncementClick() {
   const btn = document.getElementById('ann-save-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving…';
   try {
-    const existing = await getDocs(query(announcementsCol(), where('active', '==', true)));
-    for (const a of existing.docs) {
-      await updateDoc(doc(db, 'announcements', a.id), { active: false });
+    const existing = await client.models.Announcement.list({ filter: { active: { eq: true } } });
+    for (const a of (existing.data || [])) {
+      await client.models.Announcement.update({ id: a.id, active: false });
     }
-    await addDoc(announcementsCol(), { text, active: true });
+    const res = await client.models.Announcement.create({ text, active: true });
+    if (res.errors?.length) throw new Error(res.errors[0].message);
     if (savedMsg) {
       savedMsg.textContent = 'Announcement posted to all staff ✓';
       savedMsg.classList.remove('hidden');
@@ -851,9 +833,9 @@ async function clearAnnouncementClick() {
   const btn = document.getElementById('ann-clear-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Clearing…';
   try {
-    const existing = await getDocs(query(announcementsCol(), where('active', '==', true)));
-    for (const a of existing.docs) {
-      await updateDoc(doc(db, 'announcements', a.id), { active: false });
+    const existing = await client.models.Announcement.list({ filter: { active: { eq: true } } });
+    for (const a of (existing.data || [])) {
+      await client.models.Announcement.update({ id: a.id, active: false });
     }
     const input = document.getElementById('announcement-input');
     if (input) input.value = '';
@@ -872,8 +854,12 @@ if (annClearBtn) annClearBtn.addEventListener('click', clearAnnouncementClick);
 // ----------------------------- ADMIN DATA FOR THE SELECTED MONTH -----------
 async function loadAdminMonth() {
   try {
-    const snap = await getDocs(query(reviewsCol(), where('monthKey', '==', selectedMonth)));
-    return snapToRows(snap);
+    const res = await client.models.Review.list({
+      filter: { monthKey: { eq: selectedMonth } },
+      limit: 500
+    });
+    if (res.errors?.length) return [];
+    return res.data || [];
   } catch (_) {
     return [];
   }
@@ -888,11 +874,11 @@ async function renderOverview() {
   const host = document.getElementById('admin-overview-content');
   if (!host) return;
   host.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:24px 0;"><span class="spinner"></span>Loading…</div>';
-  const [monthReviews, pendingRows] = await Promise.all([
+  const [monthReviews, pendingRes] = await Promise.all([
     loadAdminMonth(),
-    getDocs(query(reviewsCol(), where('status', '==', 'pending'))).then(snapToRows).catch(() => [])
+    client.models.Review.list({ filter: { status: { eq: 'pending' } }, limit: 500 }).catch(() => ({ data: [] }))
   ]);
-  const globalPending = pendingRows.length;
+  const globalPending = (pendingRes?.data || []).length;
   const byUser = {};
   let totalApproved = 0, totalPayout = 0;
   monthReviews.forEach(r => {
