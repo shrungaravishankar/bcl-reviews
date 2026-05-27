@@ -188,7 +188,7 @@ async function ensureFirebaseSignedIn() {
     currentUid = firebaseAuth.currentUser.uid;
     return;
   }
-  const res = await client.queries.exchangeFirebaseToken();
+  const res = await client.mutations.exchangeFirebaseToken();
   if (res.errors?.length) throw new Error(res.errors[0].message);
   const payload = typeof res.data === 'string' ? JSON.parse(res.data) : (res.data || {});
   if (!payload.ok || !payload.token) throw new Error(payload.error || 'No token returned.');
