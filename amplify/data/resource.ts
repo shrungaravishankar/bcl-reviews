@@ -30,7 +30,7 @@ const schema = a
       .handler(a.handler.function(inviteUser)),
 
     exchangeFirebaseToken: a
-      .mutation()
+      .query()
       .returns(a.json())
       .authorization((allow) => [allow.authenticated()])
       .handler(a.handler.function(exchangeToken)),
