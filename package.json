@@ -8,7 +8,9 @@
     "build": "echo Static HTML — no frontend build."
   },
   "dependencies": {
-    "aws-amplify": "^6.6.0"
+    "aws-amplify": "^6.6.0",
+    "firebase": "^11.3.0",
+    "firebase-admin": "^13.0.0"
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.4.0",

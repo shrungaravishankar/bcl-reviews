@@ -3,6 +3,7 @@ import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { inviteUser } from './functions/invite-user/resource';
+import { exchangeToken } from './functions/exchange-token/resource';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 
 const backend = defineBackend({
@@ -10,6 +11,7 @@ const backend = defineBackend({
   data,
   storage,
   inviteUser,
+  exchangeToken,
 });
 
 /**

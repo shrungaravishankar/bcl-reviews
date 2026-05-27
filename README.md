@@ -1,18 +1,23 @@
-# BCL Review Rewards — AWS Amplify build
+# BCL Review Rewards — AWS Amplify + Firebase build
 
-Real backend, real cross-device sharing. The frontend is a tiny static HTML page; everything stateful lives in AWS — Cognito for auth, DynamoDB (via AppSync) for review data, S3 for screenshots. All inside your AWS account, your region, no third party.
+Real backend, real cross-device sharing. The frontend is a tiny static HTML page. Auth stays on **AWS Cognito**; review/announcement data now lives in **Google Firestore**; screenshots stay in **AWS S3**. A small token-exchange Lambda bridges the two clouds so Firestore can enforce per-user security under the same Cognito identity.
 
 ## What's in this folder
 
 | Path | Purpose |
 | --- | --- |
-| `index.html` | The page shell. Loads `app.js` and the Amplify SDK from a CDN. |
-| `app.js` | All the runtime logic — auth, screenshot upload, admin queue. |
+| `index.html` | The page shell. Loads `app.js`, the Amplify SDK, and the Firebase SDK via an importmap. |
+| `app.js` | All the runtime logic — auth, Cognito→Firebase bridge, screenshot upload, admin queue. |
+| `firebase.js` | Firebase app init; exports `firebaseAuth`, `db` (Firestore), `analytics`. |
+| `firestore.rules` | Firestore security rules — owner-scoped reviews, admin-only approvals. |
+| `firestore.indexes.json` | Composite index (`status` + `monthKey`) for the admin queue queries. |
+| `firebase.json` | Tells `firebase deploy` where the rules + indexes live. |
 | `amplify/auth/resource.ts` | Cognito User Pool definition + `admin` and `staff` groups. |
-| `amplify/data/resource.ts` | DynamoDB schema (Review, MonthlyCap, Announcement) + the `inviteUser` mutation. |
+| `amplify/data/resource.ts` | AppSync surface — `inviteUser` + `exchangeFirebaseToken` mutations only (data moved to Firestore). |
 | `amplify/storage/resource.ts` | Private S3 bucket; per-user folder isolation. |
 | `amplify/functions/invite-user/` | Lambda that calls Cognito `AdminCreateUser` so admin can invite by email. |
-| `amplify/backend.ts` | Wires the Lambda's IAM permission to the User Pool. |
+| `amplify/functions/exchange-token/` | Lambda that mints a Firebase custom token from the Cognito session (role claim from group). |
+| `amplify/backend.ts` | Wires the Lambdas' IAM permissions + the Firebase service-account secret. |
 | `package.json`, `tsconfig.json` | Required for `ampx pipeline-deploy`. |
 | `amplify.yml` | Amplify Hosting build spec: provision backend, then publish frontend. |
 | `manifest.webmanifest`, `icon.svg`, `404.html`, `robots.txt` | Static extras. |
@@ -45,6 +50,38 @@ Cognito starts with no users. The first admin has to be created manually in the 
 
 Admin → Users tab → enter name + email + role → Send invite. AWS Cognito sends them a real welcome email with a temp password (you don't need EmailJS for this — Cognito uses SES under the hood; in sandbox mode it can only mail verified addresses, see below).
 
+## One-time Firebase setup
+
+Data lives in Firestore (`reviews-facbe` project). Three things must be in place:
+
+### 1. Service-account key for the token-exchange Lambda
+
+The `exchange-token` Lambda needs Firebase Admin credentials to mint custom tokens.
+
+1. Firebase console → Project settings → **Service accounts** → **Generate new private key** → downloads a JSON file.
+2. Store the full JSON as an Amplify secret (the value the Lambda reads from `FIREBASE_SERVICE_ACCOUNT`):
+   ```bash
+   # Local sandbox:
+   npx ampx sandbox secret set FIREBASE_SERVICE_ACCOUNT < service-account.json
+   # Pipeline/branch deploy:
+   npx ampx pipeline-deploy --secret FIREBASE_SERVICE_ACCOUNT="$(cat service-account.json)"
+   ```
+   Never commit the JSON — it's a full admin credential for the Firebase project.
+
+### 2. Deploy Firestore rules + indexes
+
+```bash
+npm install -g firebase-tools   # if you don't have it
+firebase login
+firebase deploy --only firestore:rules,firestore:indexes --project reviews-facbe
+```
+
+`firebase.json` points at `firestore.rules` and `firestore.indexes.json`. The composite index can take a few minutes to build before the admin Approved/Rejected tabs return results.
+
+### 3. (Production) lock the Firebase API key
+
+The `apiKey` in `firebase.js` is public by design — security is enforced entirely by `firestore.rules`, which require a valid Firebase identity (minted only from a real Cognito session). Optionally restrict the key in Google Cloud console → Credentials → API key → HTTP referrer restrictions to your hosting domain.
+
 ## SES sandbox mode
 
 Brand-new AWS accounts have SES in **sandbox**: Cognito can only send emails to addresses you've explicitly verified. To send to anyone, request production access:
@@ -58,17 +95,22 @@ Until then, verify each invitee's email in SES → **Verified identities** so th
 ## How the data flows
 
 ```
+Sign-in:    Cognito signIn() → exchangeFirebaseToken (Lambda) → signInWithCustomToken()
+            uid = Cognito sub, custom claim role = 'admin' | 'staff'
+
 Staff phone → app.js → uploadData() → S3 bucket /reviews/<userId>/<month>/<uuid>.jpg
-                    → client.models.Review.create({status:'pending', screenshotPath, ...})
-                       → DynamoDB row visible to admin
-Admin laptop → app.js → client.models.Review.list({filter:{status:{eq:'pending'}}})
-                     → fetches all pending rows across all staff (admin group has read-all)
+                    → addDoc(reviews, {owner: uid, status:'pending', screenshotPath, ...})
+                       → Firestore doc visible to admin
+Admin laptop → app.js → getDocs(query(reviews, where('status','==','pending')))
+                     → fetches all pending docs across all staff (admin claim bypasses owner check)
                      → renders signed S3 URLs for the screenshots
-                     → click Approve → client.models.Review.update({status:'approved'})
+                     → click Approve → updateDoc(reviews/<id>, {status:'approved'})
                        → staff's history view updates next time they load
 ```
 
-Authorization is enforced by AppSync + Cognito groups. Staff users can only `create` and `read` their own Review rows. The `admin` group can read/update/delete any row.
+Authorization has two layers that share one identity:
+- **Cognito** owns sign-in, the `admin`/`staff` groups, and S3 access.
+- **Firestore rules** enforce data access using the Firebase identity minted from that Cognito session: staff can only read/create/withdraw their own `pending` rows; the `admin` role can read/update/delete anything. See `firestore.rules`.
 
 ## Local development
 
@@ -76,7 +118,9 @@ You can run a sandbox backend on your laptop without touching production:
 
 ```bash
 npm install
-npx ampx sandbox             # provisions a personal Cognito + DynamoDB + S3 in your account
+npx ampx sandbox secret set FIREBASE_SERVICE_ACCOUNT < service-account.json   # once
+npx ampx sandbox             # provisions a personal Cognito + S3 + the two Lambdas
+firebase deploy --only firestore:rules,firestore:indexes --project reviews-facbe
 ```
 
 This writes a local `amplify_outputs.json`. Serve the frontend:
@@ -102,12 +146,11 @@ Expected monthly cost after free tier: **under $1**.
 ## Security notes (for the "confidentiality" requirement)
 
 - Cognito user passwords are hashed by AWS (you never see them).
-- DynamoDB is encrypted at rest by default.
+- Firestore is encrypted at rest by Google; access is gated by `firestore.rules`, which require a Firebase identity that can only be minted from a valid Cognito session (via the `exchange-token` Lambda). The public `apiKey` alone grants nothing.
 - S3 bucket is private; no public read; objects only accessible via short-lived presigned URLs handed out by Amplify Storage.
 - Screenshot S3 objects live under `reviews/<cognitoIdentityId>/...`; IAM policies prevent users from reading each other's folders. Admin role bypasses that.
-- The Lambda for invites has the minimum IAM permissions: only `AdminCreateUser` + `AdminAddUserToGroup` on this one User Pool, nothing else.
+- The invite Lambda has minimum IAM: only `AdminCreateUser` + `AdminAddUserToGroup` on this one User Pool. The token-exchange Lambda holds the Firebase service-account key as an encrypted Amplify secret and talks only to Firebase.
 - All traffic is HTTPS-only (Amplify Hosting enforces SSL).
-- Data does not leave your AWS region.
 
 ## What's NOT in this build (yet)
 
@@ -133,3 +176,6 @@ Each is a query against existing data plus a render — straightforward addition
 | New user never gets the welcome email | SES is in sandbox mode — see "SES sandbox mode" above |
 | Admin sees "Your account exists but no admin has assigned a role yet" | Add the user to the `admin` or `staff` group in the Cognito Console |
 | "NotAuthorizedException" on operations | The signed-in user isn't in any Cognito group, or the group lacks the IAM action |
+| "Could not connect to the data backend" after sign-in | `exchange-token` Lambda failed — check the `FIREBASE_SERVICE_ACCOUNT` secret is set and the JSON is valid |
+| Firestore reads return "Missing or insufficient permissions" | Rules not deployed, or the role claim is missing — re-run `firebase deploy` and confirm the user's Cognito group |
+| Admin Approved/Rejected tabs stay empty but Pending works | The composite index is still building (or not deployed) — check Firestore console → Indexes |

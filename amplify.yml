@@ -15,6 +15,7 @@ frontend:
     files:
       - 'index.html'
       - 'app.js'
+      - 'firebase.js'
       - 'amplify-bundle.js'
       - 'amplify_outputs.json'
       - 'manifest.webmanifest'

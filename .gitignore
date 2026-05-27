@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Build output
+amplify-bundle.js
+
+# Amplify generated / local
+amplify_outputs.json
+.amplify/
+amplify/.amplify/
+
+# Secrets — NEVER commit
+service-account.json
+*serviceAccount*.json
+*service-account*.json
+*adminsdk*.json
+reviews-facbe-*.json
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db

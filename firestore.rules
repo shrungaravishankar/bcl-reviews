@@ -1,0 +1,48 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+
+    // Reviews: a staff member owns the rows they create (owner == their uid).
+    // They may read and withdraw (delete) their own *pending* rows, and create
+    // new pending rows for themselves. Only admins approve/reject (update) or
+    // touch other people's rows.
+    match /reviews/{reviewId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.owner == request.auth.uid);
+
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.owner == request.auth.uid &&
+        request.resource.data.status == 'pending'
+      );
+
+      allow update: if isAdmin();
+
+      allow delete: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.owner == request.auth.uid &&
+        resource.data.status == 'pending'
+      );
+    }
+
+    // Announcements: any authenticated user reads; only admins write.
+    match /announcements/{announcementId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Monthly caps: any authenticated user reads; only admins write.
+    match /monthlyCaps/{capId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
